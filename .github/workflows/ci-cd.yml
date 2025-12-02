@@ -8,9 +8,6 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  # ИСПРАВЛЕННЫЕ ПУТИ:
-  PROJECT_PATH: 'src/WebCalculator/WebCalculator.csproj'
-  TEST_PATH: 'tests/WebCalculator.Tests/WebCalculator.Tests.csproj'
 
 jobs:
   setup:
@@ -20,14 +17,16 @@ jobs:
       - name: 💷 Загружаем код из репозитория
         uses: actions/checkout@v4
 
-      - name: 💷 Проверяем структуру проекта
+      - name: 🔍 Проверяем структуру проекта
         run: |
-          echo "Проверяем наличие всех файлов..."
-          ls -la
-          echo "---"
-          ls -la src/WebCalculator/
-          echo "---"
-          ls -la tests/WebCalculator.Tests/
+          echo "=== СТРУКТУРА ПРОЕКТА ==="
+          find . -name "*.csproj" -type f
+          echo ""
+          echo "=== СОДЕРЖИМОЕ tests/ ==="
+          ls -R tests/ || echo "Папка tests/ не найдена"
+          echo ""
+          echo "=== ТЕКУЩАЯ ДИРЕКТОРИЯ ==="
+          pwd
 
       - name: 💷 Устанавливаем .NET
         uses: actions/setup-dotnet@v3
@@ -36,9 +35,25 @@ jobs:
 
       - name: 💷 Восстанавливаем зависимости
         run: |
-          # Указываем полные пути к .csproj файлам
-          dotnet restore ${{ env.PROJECT_PATH }}
-          dotnet restore ${{ env.TEST_PATH }}
+          # Основной проект
+          dotnet restore src/WebCalculator/WebCalculator.csproj
+          
+          # Ищем тестовый проект
+          if [ -f "tests/WebCalculator.Tests.csproj" ]; then
+            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests.csproj"
+            dotnet restore tests/WebCalculator.Tests.csproj
+          elif [ -f "tests/WebCalculator.Tests/WebCalculator.Tests.csproj" ]; then
+            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests/WebCalculator.Tests.csproj"
+            dotnet restore tests/WebCalculator.Tests/WebCalculator.Tests.csproj
+          elif [ -f "tests/WebCalculator.Tests/WebCalculator.Tests.csproj" ]; then
+            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests/WebCalculator.Tests.csproj"
+            dotnet restore tests/WebCalculator.Tests/WebCalculator.Tests.csproj
+          else
+            echo "❌ Тестовый проект не найден!"
+            echo "Ищем все .csproj файлы:"
+            find . -name "*.csproj" -type f
+            exit 1
+          fi
 
   build:
     name: 🏗️ Сборка проекта
@@ -54,12 +69,11 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: 🏗️ Собираем проект
-        run: dotnet build ${{ env.PROJECT_PATH }} --configuration Release --no-restore
+        run: dotnet build src/WebCalculator/WebCalculator.csproj --configuration Release --no-restore
 
       - name: 📁 Проверяем результат сборки
         run: |
           echo "Проверяем собранные файлы..."
-          # Путь к собранным файлам
           ls -la src/WebCalculator/bin/Release/net8.0/
 
       - name: 💾 Сохраняем собранное приложение
@@ -83,16 +97,21 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: ✓ Запускаем unit-тесты
-        run: dotnet test ${{ env.TEST_PATH }} --verbosity normal --logger "trx"
+        run: |
+          # Запускаем тесты из корня проекта
+          cd tests
+          dotnet test --verbosity normal --logger "trx"
+          # ИЛИ если тесты в подпапке:
+          # dotnet test WebCalculator.Tests.csproj --verbosity normal --logger "trx"
 
       - name: 📊 Сохраняем результаты тестов
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: tests/WebCalculator.Tests/TestResults/
+          path: tests/TestResults/  # Измененный путь!
           retention-days: 30
 
-
+  # ... остальные job остаются без изменений
   package:
     name: 📦 Создание пакета
     needs: test
@@ -107,7 +126,7 @@ jobs:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
       - name: 📦 Публикуем приложение
-        run: dotnet publish ${{ env.PROJECT_PATH }} -c Release -o ./publish --self-contained false
+        run: dotnet publish src/WebCalculator/WebCalculator.csproj -c Release -o ./publish --self-contained false
 
       - name: 📎 Архивируем приложение
         run: |
