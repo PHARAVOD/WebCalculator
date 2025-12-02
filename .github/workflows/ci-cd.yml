@@ -8,8 +8,9 @@ on:
 
 env:
   DOTNET_VERSION: '8.0.x'
-  PROJECT_PATH: 'src/WebCalculator'
-  TEST_PATH: 'tests/WebCalculator.Tests'
+  # ИСПРАВЛЕННЫЕ ПУТИ:
+  PROJECT_PATH: 'src/WebCalculator/WebCalculator.csproj'
+  TEST_PATH: 'tests/WebCalculator.Tests/WebCalculator.Tests.csproj'
 
 jobs:
   setup:
@@ -35,6 +36,7 @@ jobs:
 
       - name: 💷 Восстанавливаем зависимости
         run: |
+          # Указываем полные пути к .csproj файлам
           dotnet restore ${{ env.PROJECT_PATH }}
           dotnet restore ${{ env.TEST_PATH }}
 
@@ -57,13 +59,14 @@ jobs:
       - name: 📁 Проверяем результат сборки
         run: |
           echo "Проверяем собранные файлы..."
-          ls -la ${{ env.PROJECT_PATH }}/bin/Release/net8.0/
+          # Путь к собранным файлам
+          ls -la src/WebCalculator/bin/Release/net8.0/
 
       - name: 💾 Сохраняем собранное приложение
         uses: actions/upload-artifact@v4
         with:
           name: web-calculator-app
-          path: ${{ env.PROJECT_PATH }}/bin/Release/net8.0/
+          path: src/WebCalculator/bin/Release/net8.0/
           retention-days: 7
 
   test:
@@ -86,8 +89,9 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-results
-          path: ${{ env.TEST_PATH }}/TestResults/
+          path: tests/WebCalculator.Tests/TestResults/
           retention-days: 30
+
 
   package:
     name: 📦 Создание пакета
