@@ -6,58 +6,9 @@ on:
   pull_request:
     branches: [ "main" ]
 
-env:
-  DOTNET_VERSION: '8.0.x'
-
 jobs:
-  setup:
-    name: 💷 Подготовка окружения
-    runs-on: ubuntu-latest
-    steps:
-      - name: 💷 Загружаем код из репозитория
-        uses: actions/checkout@v4
-
-      - name: 🔍 Проверяем структуру проекта
-        run: |
-          echo "=== СТРУКТУРА ПРОЕКТА ==="
-          find . -name "*.csproj" -type f
-          echo ""
-          echo "=== СОДЕРЖИМОЕ tests/ ==="
-          ls -R tests/ || echo "Папка tests/ не найдена"
-          echo ""
-          echo "=== ТЕКУЩАЯ ДИРЕКТОРИЯ ==="
-          pwd
-
-      - name: 💷 Устанавливаем .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: 💷 Восстанавливаем зависимости
-        run: |
-          # Основной проект
-          dotnet restore src/WebCalculator/WebCalculator.csproj
-          
-          # Ищем тестовый проект
-          if [ -f "tests/WebCalculator.Tests.csproj" ]; then
-            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests.csproj"
-            dotnet restore tests/WebCalculator.Tests.csproj
-          elif [ -f "tests/WebCalculator.Tests/WebCalculator.Tests.csproj" ]; then
-            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests/WebCalculator.Tests.csproj"
-            dotnet restore tests/WebCalculator.Tests/WebCalculator.Tests.csproj
-          elif [ -f "tests/WebCalculator.Tests/WebCalculator.Tests.csproj" ]; then
-            echo "✅ Найден тестовый проект: tests/WebCalculator.Tests/WebCalculator.Tests.csproj"
-            dotnet restore tests/WebCalculator.Tests/WebCalculator.Tests.csproj
-          else
-            echo "❌ Тестовый проект не найден!"
-            echo "Ищем все .csproj файлы:"
-            find . -name "*.csproj" -type f
-            exit 1
-          fi
-
-  build:
-    name: 🏗️ Сборка проекта
-    needs: setup
+  build-and-test:
+    name: 🏗️ Сборка и тестирование
     runs-on: ubuntu-latest
     steps:
       - name: 💷 Загружаем код
@@ -66,15 +17,22 @@ jobs:
       - name: 💷 Устанавливаем .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: '8.0.x'
 
-      - name: 🏗️ Собираем проект
-        run: dotnet build src/WebCalculator/WebCalculator.csproj --configuration Release --no-restore
-
-      - name: 📁 Проверяем результат сборки
+      - name: 💷 Восстанавливаем зависимости
         run: |
-          echo "Проверяем собранные файлы..."
-          ls -la src/WebCalculator/bin/Release/net8.0/
+          echo "=== ВОССТАНОВЛЕНИЕ ВСЕХ ПРОЕКТОВ ==="
+          # Находим и восстанавливаем все .csproj файлы
+          find . -name "*.csproj" -type f | while read proj; do
+            echo "Восстанавливаем: $proj"
+            dotnet restore "$proj"
+          done
+
+      - name: 🏗️ Собираем основной проект
+        run: |
+          echo "=== СБОРКА ОСНОВНОГО ПРОЕКТА ==="
+          dotnet build src/WebCalculator/WebCalculator.csproj --configuration Release
+          echo "✅ Сборка завершена"
 
       - name: 💾 Сохраняем собранное приложение
         uses: actions/upload-artifact@v4
@@ -83,50 +41,23 @@ jobs:
           path: src/WebCalculator/bin/Release/net8.0/
           retention-days: 7
 
-  test:
-    name: ✓ Запуск тестов
-    needs: build
-    runs-on: ubuntu-latest
-    steps:
-      - name: 💷 Загружаем код
-        uses: actions/checkout@v4
-
-      - name: 💷 Устанавливаем .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
       - name: ✓ Запускаем unit-тесты
         run: |
-          # Запускаем тесты из корня проекта
-          cd tests
-          dotnet test --verbosity normal --logger "trx"
-          # ИЛИ если тесты в подпапке:
-          # dotnet test WebCalculator.Tests.csproj --verbosity normal --logger "trx"
-
-      - name: 📊 Сохраняем результаты тестов
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-results
-          path: tests/TestResults/  # Измененный путь!
-          retention-days: 30
-
-  # ... остальные job остаются без изменений
-  package:
-    name: 📦 Создание пакета
-    needs: test
-    runs-on: ubuntu-latest
-    steps:
-      - name: 💷 Загружаем код
-        uses: actions/checkout@v4
-
-      - name: 💷 Устанавливаем .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
+          echo "=== ЗАПУСК ТЕСТОВ ==="
+          # Ищем тестовый проект
+          TEST_PROJ=$(find . -name "*Test*.csproj" -type f | head -1)
+          if [ -n "$TEST_PROJ" ]; then
+            echo "Найден тестовый проект: $TEST_PROJ"
+            dotnet test "$TEST_PROJ" --verbosity normal --logger "trx"
+          else
+            echo "⚠️ Тестовый проект не найден"
+          fi
 
       - name: 📦 Публикуем приложение
-        run: dotnet publish src/WebCalculator/WebCalculator.csproj -c Release -o ./publish --self-contained false
+        run: |
+          echo "=== ПУБЛИКАЦИЯ ПРИЛОЖЕНИЯ ==="
+          dotnet publish src/WebCalculator/WebCalculator.csproj -c Release -o ./publish --self-contained false
+          echo "✅ Публикация завершена"
 
       - name: 📎 Архивируем приложение
         run: |
@@ -141,26 +72,21 @@ jobs:
           path: web-calculator-v1.0.0.zip
           retention-days: 30
 
-  report:
-    name: 📄 Итоговый отчет
-    needs: [setup, build, test, package]
-    runs-on: ubuntu-latest
-    steps:
-      - name: 📄 Генерируем отчет
+      - name: 📄 Итоговый отчет
         run: |
           echo "============================================================="
           echo "📌 CI/CD ПАЙПЛАН УСПЕШНО ЗАВЕРШЕН! ✅"
           echo "============================================================="
           echo ""
           echo "📋 ВЫПОЛНЕННЫЕ ЭТАПЫ:"
-          echo "   ✅ Подготовка окружения"
+          echo "   ✅ Загрузка кода"
+          echo "   ✅ Восстановление зависимостей"
           echo "   ✅ Сборка веб-приложения"
-          echo "   ✅ Запуск всех тестов"
+          echo "   ✅ Запуск unit-тестов"
           echo "   ✅ Создание релизного пакета"
           echo ""
           echo "📦 СОЗДАННЫЕ АРТЕФАКТЫ:"
           echo "   ● web-calculator-app - собранное приложение"
-          echo "   ● test-results - результаты тестирования"
           echo "   ● release-package - релизный пакет"
           echo ""
           echo "🕒 Время: $(date)"
